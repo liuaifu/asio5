@@ -33,5 +33,5 @@ public:
 	boost::shared_ptr<client> client_ptr_;
 	boost::shared_ptr<service> service_ptr_;
 	channel_ptr channel_ptr_;
-	std::map<client*,boost::shared_ptr<client>> map_;
+	std::map<client*,boost::shared_ptr<client> > map_;
 };

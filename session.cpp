@@ -33,7 +33,7 @@ void session::start()
 void session::stop(boost::shared_ptr<client> client_ptr_)
 {
 	cout<<__FUNCTION__<<endl;
-	auto it = map_.find(client_ptr_.get());
+	std::map<client*,boost::shared_ptr<client> >::iterator it = map_.find(client_ptr_.get());
 	if(it!=map_.end()){
 		map_.erase(it);
 	}
