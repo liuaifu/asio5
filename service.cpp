@@ -14,23 +14,9 @@ service::~service(void)
 	socket_.close();
 }
 
-bool service::start(string host, string port)
+bool service::start()
 {
 	cout<<__FUNCTION__<<endl;
-	tcp::resolver resolver(socket_.get_io_service());
-    tcp::resolver::query socks_query(host, port);
-    tcp::resolver::iterator endpoint_iterator = resolver.resolve(socks_query);
-	try{
-		boost::asio::connect(socket_, endpoint_iterator);
-	}
-	catch(std::exception ex)
-	{
-		cout<<ex.what()<<endl;
-		this->stop();
-		return false;
-	}
-
-	cout<<"service"<<"start"<<endl;
 	socket_.async_read_some(boost::asio::buffer(data_, max_length),
 			boost::bind(&service::handle_read, shared_from_this(),
 			boost::asio::placeholders::error,
@@ -54,21 +40,6 @@ void service::setClient(boost::shared_ptr<client> ptr)
 {
 	cout<<__FUNCTION__<<endl;
 	client_ptr_ = ptr;
-}
-
-bool service::connect(string host, string port)
-{
-	cout<<__FUNCTION__<<endl;
-	tcp::resolver resolver(socket_.get_io_service());
-	tcp::resolver::query query(tcp::v4(), host, port);
-	tcp::resolver::iterator iterator = resolver.resolve(query);
-	boost::system::error_code ec;
-	boost::asio::connect(socket_, iterator, ec);
-	if(ec){
-		cout<<"service"<<"Á¬½Ó"<<host<<":"<<port<<"Ê§°Ü£¡"<<ec.message()<<endl;
-		return false;
-	}else
-		return true;
 }
 
 void service::write(char *data, size_t size)

@@ -125,15 +125,13 @@ void client::handle_read(const boost::system::error_code& error, size_t bytes_tr
 			sprintf(port, "%d", ntohs(*(unsigned short*)(data_ + 5 + data_[4])));
 		}
 
-		if(service_ptr_->start(host, port)){
-			data_[1] = 0x00;
-		}else{
-			data_[1] = 0x01;
-		}
-		boost::asio::async_write(socket_,
-			boost::asio::buffer(data_, bytes_transferred),
-			boost::bind(&client::handle_write, shared_from_this(),
-			boost::asio::placeholders::error));
+		tcp::resolver resolver(socket_.get_io_service());
+		tcp::resolver::query query(tcp::v4(), host, port);
+		tcp::resolver::iterator iterator = resolver.resolve(query);
+		service_ptr_->socket_.async_connect(*iterator, 
+			boost::bind(&client::handle_connect_server, shared_from_this(),
+				boost::asio::buffer(data_, bytes_transferred), boost::asio::placeholders::error, ++iterator));
+		return;
 	}else{
 		service_ptr_->write(data_, bytes_transferred);
 	}
@@ -160,4 +158,26 @@ void client::handle_write(const boost::system::error_code& error)
 		this->stop();
 		return;
 	}
+}
+
+void client::handle_connect_server(boost::asio::mutable_buffers_1 buffer, const boost::system::error_code& error, tcp::resolver::iterator endpoint_iterator)
+{
+	unsigned char *p = boost::asio::buffer_cast<unsigned char*>(buffer);
+	if (error)
+	{
+		p[1] = 0x01;
+	}
+	else
+	{
+		p[1] = 0x00;
+		service_ptr_->start();
+	}
+	boost::asio::async_write(socket_, buffer,
+		boost::bind(&client::handle_write, shared_from_this(),
+		boost::asio::placeholders::error));
+
+	socket_.async_read_some(boost::asio::buffer(data_, max_length),
+		boost::bind(&client::handle_read, shared_from_this(),
+		boost::asio::placeholders::error,
+		boost::asio::placeholders::bytes_transferred));
 }

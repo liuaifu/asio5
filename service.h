@@ -18,9 +18,8 @@ public:
 	~service(void);
 
 	void setStop(boost::function<void(boost::shared_ptr<client>)> _stop);
-	bool start(string host, string port);
+	bool start();
 	void stop();
-	bool connect(string host, string port);
 	void write(char *data, size_t size);
 	void setClient(boost::shared_ptr<client> ptr);
 

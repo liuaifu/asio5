@@ -82,7 +82,6 @@
     <None Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="channel.hpp" />
     <ClInclude Include="client.h" />
     <ClInclude Include="service.h" />
     <ClInclude Include="session.h" />

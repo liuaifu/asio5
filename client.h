@@ -30,8 +30,7 @@ public:
 private:
 	void handle_read(const boost::system::error_code& error, size_t bytes_transferred);
 	void handle_write(const boost::system::error_code& error);
-	//void handle_read_server(const boost::system::error_code& error,	size_t bytes_transferred);
-	//void handle_write_server(const boost::system::error_code& error);
+	void handle_connect_server(boost::asio::mutable_buffers_1 buffer, const boost::system::error_code& error, tcp::resolver::iterator endpoint_iterator);
 
 	enum { max_length = 1024 };
 	char data_[max_length];

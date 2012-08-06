@@ -1,4 +1,5 @@
 #include "session.h"
+#include <boost/bind.hpp>
 
 extern boost::asio::io_service g_io_service;
 session::session()

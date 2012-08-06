@@ -6,7 +6,6 @@
 #include <boost/shared_ptr.hpp>
 #include "session.h"
 #include "stdlib.h"
-#include "channel.hpp"
 
 using namespace std;
 using boost::asio::ip::tcp;
