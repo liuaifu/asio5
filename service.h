@@ -14,7 +14,7 @@ class client;
 class service: public boost::enable_shared_from_this<service>
 {
 public:
-	service(boost::asio::io_service& io_service);
+	service(boost::asio::io_service& io_service, int id);
 	~service(void);
 
 	void setStop(boost::function<void(boost::shared_ptr<client>)> _stop);
@@ -35,4 +35,5 @@ private:
 	char data_[max_length];
 	boost::weak_ptr<client> client_ptr_;
 	boost::function<void(boost::shared_ptr<client>)> stop_;
+	int id_;
 };

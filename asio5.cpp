@@ -4,6 +4,12 @@
 #include <boost/bind.hpp>
 #include <boost/asio.hpp>
 #include <boost/shared_ptr.hpp>
+
+#include <boost/log/utility/init/to_file.hpp>
+#include <boost/log/utility/init/to_console.hpp>
+#include <boost/log/trivial.hpp>
+#include <boost/log/core.hpp>
+#include <boost/log/filters.hpp>
 #include "session.h"
 #include "stdlib.h"
 
@@ -55,6 +61,8 @@ private:
 
 int main(int argc, char* argv[])
 {
+	boost::log::init_log_to_console(std::clog, boost::log::keywords::format = "%TimeStamp%: %_%");
+
 	try
 	{
 		if (argc != 2)

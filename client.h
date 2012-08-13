@@ -10,7 +10,7 @@ using boost::asio::ip::tcp;
 class client : public boost::enable_shared_from_this<client>
 {
 public:
-	client(boost::asio::io_service& io_service);
+	client(boost::asio::io_service& io_service, int id);
 	~client(void);
 
 	tcp::socket& socket()
@@ -26,6 +26,10 @@ public:
 	{
 		service_ptr_ = ptr;
 	}
+	boost::shared_ptr<service> getService()
+	{
+		return service_ptr_;
+	}
 
 private:
 	void handle_read(const boost::system::error_code& error, size_t bytes_transferred);
@@ -37,6 +41,8 @@ private:
 	int recv_count;	//接收次数
 	boost::shared_ptr<service> service_ptr_;
 	boost::function<void(boost::shared_ptr<client>)> stop_;
+	int id_;
+	bool must_close_;
 
 public:
 	tcp::socket socket_;
