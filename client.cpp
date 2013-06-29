@@ -1,7 +1,7 @@
 #include "client.h"
 #include <iostream>
 #include <boost/bind.hpp>
-#include <boost/log/trivial.hpp>
+//#include <boost/log/trivial.hpp>
 #include "session.h"
 
 using namespace std;
@@ -9,26 +9,26 @@ using namespace std;
 client::client(boost::asio::io_service& io_service, int id)
 	:socket_(io_service),id_(id)
 {
-	BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
+	//BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
 	recv_count = 0;
 	must_close_ = false;
 }
 
 client::~client(void)
 {
-	BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
+	//BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
 	socket_.close();
 }
 
 void client::setStop(boost::function<void(boost::shared_ptr<client>)> _stop)
 {
-	BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
+	//BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
 	stop_ = _stop;
 }
 
 void client::start()
 {
-	BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
+	//BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
 	socket_.async_read_some(boost::asio::buffer(data_, max_length),
 		boost::bind(&client::handle_read, this,
 		boost::asio::placeholders::error,
@@ -37,14 +37,14 @@ void client::start()
 
 void client::stop()
 {
-	BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
+	//BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
 	stop_(shared_from_this());
 }
 
 void client::write(char *data, size_t size)
 {
-	BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
-	BOOST_LOG_TRIVIAL(debug) <<id_<<": "<<"向client"<<"发送"<<size<<"字节";
+	//BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
+	//BOOST_LOG_TRIVIAL(debug) <<id_<<": "<<"向client"<<"发送"<<size<<"字节";
 	boost::asio::async_write(socket_,
 		boost::asio::buffer(data, size),
 		boost::bind(&client::handle_write, shared_from_this(),
@@ -53,23 +53,23 @@ void client::write(char *data, size_t size)
 
 void client::handle_read(const boost::system::error_code& error, size_t bytes_transferred)
 {
-	BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
+	//BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
 	if(error){
 		if(error==boost::asio::error::operation_aborted){
-			BOOST_LOG_TRIVIAL(debug) << id_ << ": abort " << __FUNCTION__;
+			//BOOST_LOG_TRIVIAL(debug) << id_ << ": abort " << __FUNCTION__;
 			return;
 		}
 		if(error==boost::asio::error::eof){
 			this->stop();
 			return;
 		}
-		BOOST_LOG_TRIVIAL(error) <<id_<<": "<<"client"<<"读取数据出错：错误码="<<error.value()<<", "<<error.message();
+		//BOOST_LOG_TRIVIAL(error) <<id_<<": "<<"client"<<"读取数据出错：错误码="<<error.value()<<", "<<error.message();
 		//service_ptr_->stop();
 		this->stop();
 		return;
 	}
 
-	BOOST_LOG_TRIVIAL(debug)<<id_<<": "<<"从client"<<"读取到"<<bytes_transferred<<"字节";
+	//BOOST_LOG_TRIVIAL(debug)<<id_<<": "<<"从client"<<"读取到"<<bytes_transferred<<"字节";
 	recv_count++;
 	if(recv_count==1)
 	{
@@ -112,7 +112,7 @@ void client::handle_read(const boost::system::error_code& error, size_t bytes_tr
 		//|VER|CMD|RSV|ATYP|DST.ADDR|DST.PORT|
 		if(data_[0]!=0x05 || data_[1]!=0x01 || data_[2]!=0x00 || (data_[3]!=0x01 && data_[3]!=0x03))
 		{
-			BOOST_LOG_TRIVIAL(error)<<id_<<": "<<"client"<<"不支持的代理协议";
+			//BOOST_LOG_TRIVIAL(error)<<id_<<": "<<"client"<<"不支持的代理协议";
 			//service_ptr_->stop();
 			this->stop();
 			return;
@@ -149,7 +149,7 @@ void client::handle_read(const boost::system::error_code& error, size_t bytes_tr
 
 void client::handle_write(const boost::system::error_code& error)
 {
-	BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
+	//BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
 	if (error)
 	{
 		if(error==boost::asio::error::operation_aborted)
@@ -158,7 +158,7 @@ void client::handle_write(const boost::system::error_code& error)
 			this->stop();
 			return;
 		}
-		BOOST_LOG_TRIVIAL(error)<<id_<<": "<<"client"<<"发送数据出错：错误码="<<error.value()<<", "<<error.message();
+		//BOOST_LOG_TRIVIAL(error)<<id_<<": "<<"client"<<"发送数据出错：错误码="<<error.value()<<", "<<error.message();
 		//service_ptr_->stop();
 		this->stop();
 		return;
@@ -170,17 +170,17 @@ void client::handle_write(const boost::system::error_code& error)
 
 void client::handle_connect_server(boost::asio::mutable_buffers_1 buffer, const boost::system::error_code& error, tcp::resolver::iterator endpoint_iterator)
 {
-	BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
+	//BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
 	unsigned char *p = boost::asio::buffer_cast<unsigned char*>(buffer);
 	if (error)
 	{
-		BOOST_LOG_TRIVIAL(debug) << id_ << ": 连接" << endpoint_iterator->host_name() << "失败";
+		//BOOST_LOG_TRIVIAL(debug) << id_ << ": 连接" << endpoint_iterator->host_name() << "失败";
 		p[1] = 0x01;
 		must_close_ = true;
 	}
 	else
 	{
-		BOOST_LOG_TRIVIAL(debug) << id_ << ": 已连接到" << endpoint_iterator->host_name();
+		//BOOST_LOG_TRIVIAL(debug) << id_ << ": 已连接到" << endpoint_iterator->host_name();
 		p[1] = 0x00;
 		service_ptr_->start();
 	}
