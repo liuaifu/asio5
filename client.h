@@ -30,6 +30,7 @@ public:
 	{
 		return service_ptr_;
 	}
+	int getID(){ return id_; }
 
 private:
 	void handle_read(const boost::system::error_code& error, size_t bytes_transferred);
@@ -43,7 +44,5 @@ private:
 	boost::function<void(boost::shared_ptr<client>)> stop_;
 	int id_;
 	bool must_close_;
-
-public:
 	tcp::socket socket_;
 };

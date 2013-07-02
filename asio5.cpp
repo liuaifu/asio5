@@ -2,12 +2,18 @@
 #include <iostream>
 #include <set>
 #include <boost/bind.hpp>
-#include <boost/asio.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/asio.hpp>
 
 #include "session.h"
+
+#if !defined (_WIN32) && !defined (_WIN64)
+#include <unistd.h>
+#else
+//#include <windows.h>
+#endif
 
 using namespace std;
 using namespace boost;
@@ -37,13 +43,16 @@ private:
 
 	void handle_accept(boost::shared_ptr<client> client_ptr_, const boost::system::error_code& error)
 	{
-		if (!error)
+
+		if (!error &&client_ptr_->socket().remote_endpoint().address().to_string()!="")
 		{
+			cout << client_ptr_->socket().remote_endpoint().address().to_string() + " connected" << endl;
 			session_ptr->start();
 		}
 		else
 		{
-			cout<<__FUNCTION__<<"´íÎó£º"<<error<<endl;
+			session_ptr->stop(client_ptr_);
+			cout << __FUNCTION__ << "´íÎó£º" << error << endl;
 		}
 
 		start_accept();
@@ -52,42 +61,50 @@ private:
 
 	asio::io_service& io_service_;
 	tcp::acceptor acceptor_;
-	shared_ptr<session> session_ptr;
+	boost::shared_ptr<session> session_ptr;
 
 };
 
-int main(int argc, char* argv[])
+unsigned int get_core_count()
 {
-	cout<<"asio5 v0.2"<<endl;
-	cout<<"laf163@gmail.com"<<endl;
-	vector<shared_ptr<thread> > threads;
-	try
-	{
-		if (argc != 2)
-		{
-			std::cerr << "Usage: asio5 <port>\n";
-			return 1;
-		}
+	unsigned count = 1;
+#if !defined (_WIN32) && !defined (_WIN64)
+	count = sysconf(_SC_NPROCESSORS_CONF);	//_SC_NPROCESSORS_ONLN
+#else
+	SYSTEM_INFO si;
+	GetSystemInfo(&si);
+	count = si.dwNumberOfProcessors;
+#endif  
+	return count;
+}
 
-		int port;
-		try{		
-			lexical_cast<int>(argv[1]);
-		}
-		catch(bad_lexical_cast &e){
-			cout<<"port error! "<<e.what()<<endl;
-			return 1;
-		}
-		shared_ptr<server> server_ptr( new server(g_io_service, atoi(argv[1])) );
-		cout<<"listen on 0.0.0.0:"<<argv[1]<<endl;
-		for(int i=0;i<4;i++){
-			threads.push_back(shared_ptr<thread>( new thread(bind(&asio::io_service::run, &g_io_service)) ));
-		}
-		g_io_service.run();
-	}
-	catch (std::exception& e)
+int main(int argc, char* argv [])
+{
+	cout << "asio5 v0.2" << endl;
+	cout << "laf163@gmail.com" << endl;
+	vector<boost::shared_ptr<thread> > threads;
+
+	if (argc != 2)
 	{
-		std::cerr << "Exception: " << e.what() << "\n";
+		std::cerr << "Usage: asio5 <port>\n";
+		return 1;
 	}
+
+	int port;
+	try{
+		port = lexical_cast<int>(argv[1]);
+	}
+	catch (bad_lexical_cast &e){
+		cout << "port error! " << e.what() << endl;
+		return 1;
+	}
+	boost::shared_ptr<server> server_ptr(new server(g_io_service, port));
+	cout << "work thread count is " << get_core_count() << endl;
+	cout << "listening on 0.0.0.0:" << port << endl;
+	for (unsigned int i = 0; i < get_core_count() - 1; i++){
+		threads.push_back(boost::shared_ptr<thread>(new thread(bind(&asio::io_service::run, &g_io_service))));
+	}
+	g_io_service.run();
 
 	return 0;
 }

@@ -1,6 +1,7 @@
 #pragma once
 #include <boost/shared_ptr.hpp>
 #include <boost/enable_shared_from_this.hpp>
+#include <boost/thread/mutex.hpp>
 #include "client.h"
 #include <map>
 
@@ -18,5 +19,6 @@ public:
 
 public:
 	boost::shared_ptr<client> client_ptr_;
-	std::map<client*,boost::shared_ptr<client> > map_;
+	std::map<client*,boost::shared_ptr<client> > sessions;
+	boost::mutex mutex_;
 };
