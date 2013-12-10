@@ -21,24 +21,12 @@
     <ClInclude Include="targetver.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="client.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="service.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="session.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="asio5.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="client.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="service.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="session.cpp">
