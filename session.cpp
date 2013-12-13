@@ -138,6 +138,7 @@ void session::handle_client_read(const boost::system::error_code& error, size_t 
 		tcp::resolver resolver(g_io_service);
 		tcp::resolver::query query(tcp::v4(), host, port);
 		tcp::resolver::iterator iterator = resolver.resolve(query);
+		cout << "connect to " << host << ":" << port << endl;
 		server_socket.async_connect(*iterator, 
 			strand_.wrap(boost::bind(&session::handle_connect_server, shared_from_this(),
 				boost::asio::buffer(client_buf, bytes_transferred),boost::asio::placeholders::error, iterator)
