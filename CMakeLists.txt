@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 2.8)
 PROJECT(asio5)
 ADD_EXECUTABLE(asio5
-	asio5.cpp
+	main.cpp
 	session.cpp
 	)
 
 find_package(Boost
 	1.42.0
 	REQUIRED
-	COMPONENTS system thread
+	COMPONENTS system thread program_options
 	)
 if(Boost_FOUND)
 	include_directories(${Boost_INCLUDE_DIRS})

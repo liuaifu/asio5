@@ -1,10 +1,10 @@
-#include <cstdlib>
+﻿#include <cstdlib>
 #include <iostream>
 #include <set>
+#include <boost/program_options.hpp>
 #include <boost/bind.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/thread/thread.hpp>
-#include <boost/lexical_cast.hpp>
 #include <boost/asio.hpp>
 
 #include "session.h"
@@ -18,7 +18,6 @@
 using namespace std;
 using namespace boost;
 using boost::asio::ip::tcp;
-boost::asio::io_service g_io_service;
 
 class server
 {
@@ -47,13 +46,13 @@ private:
 		{
 			cout << client_socket.remote_endpoint().address().to_string() + " connected" << endl;
 			session_ptr->start();
-			session_ptr.reset(new session(g_io_service));
+			session_ptr.reset(new session(io_service_));
 		}
 		else
 		{
 			session_ptr->close_client();
 			session_ptr->close_server();
-			cout << __FUNCTION__ << "����" << error << endl;
+			cout << __FUNCTION__ << "错误：" << error << endl;
 		}
 
 		start_accept();
@@ -80,31 +79,37 @@ unsigned int get_core_count()
 
 int main(int argc, char* argv [])
 {
-	cout << "asio5 v0.3" << endl;
+	cout << "asio5 v0.4" << endl;
 	cout << "laf163@gmail.com" << endl;
-	vector<boost::shared_ptr<thread> > threads;
 
-	if (argc != 2)
-	{
-		std::cerr << "Usage: asio5 <port>\n";
-		return 1;
+	using namespace boost::program_options;
+	//声明需要的选项
+	options_description desc("Allowed options");
+	desc.add_options()
+		("help,h", "produce help message")
+		("port", value<int>()->default_value(7070), "listen port")
+		;
+
+	variables_map vm;
+	store(parse_command_line(argc, argv, desc), vm);
+	notify(vm);
+
+	if (vm.count("help")) {
+		std::cout << desc << std::endl;
+		return 0;
 	}
 
-	int port;
-	try{
-		port = lexical_cast<int>(argv[1]);
-	}
-	catch (bad_lexical_cast &e){
-		cout << "port error! " << e.what() << endl;
-		return 1;
-	}
-	boost::shared_ptr<server> server_ptr(new server(g_io_service, port));
+	vector<boost::shared_ptr<boost::thread> > threads;
+
+	int port = vm["port"].as<int>();
+	boost::asio::io_service io_service_;
+	boost::shared_ptr<server> server_ptr(new server(io_service_, port));
 	cout << "work thread count is " << get_core_count() << endl;
 	cout << "listening on 0.0.0.0:" << port << endl;
 	for (unsigned int i = 0; i < get_core_count() - 1; i++){
-		threads.push_back(boost::shared_ptr<thread>(new thread(boost::bind(&asio::io_service::run, &g_io_service))));
+		threads.push_back(boost::shared_ptr<boost::thread>(new boost::thread(boost::bind(&asio::io_service::run, &io_service_))));
 	}
-	g_io_service.run();
+	io_service_.run();
 
 	return 0;
 }

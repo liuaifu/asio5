@@ -1,9 +1,11 @@
-#pragma once
+﻿#pragma once
 #include <boost/shared_ptr.hpp>
 #include <boost/enable_shared_from_this.hpp>
 #include <boost/thread/mutex.hpp>
 #include <boost/asio.hpp>
 #include <map>
+#include <utility>
+#include <deque>
 
 using namespace std;
 using boost::asio::ip::tcp;
@@ -35,10 +37,17 @@ public:
 private:
 	enum { SOCKET_RECV_BUF_LEN = 1024 };
 	
+	boost::asio::io_service& io_service_;
 	tcp::socket server_socket;
 	
 	char client_buf[SOCKET_RECV_BUF_LEN];
 	char server_buf[SOCKET_RECV_BUF_LEN];
+
+	std::deque<std::pair<size_t, boost::shared_ptr<char> > > deque_to_client;
+	boost::mutex mutex_deque_to_client;
+
+	std::deque<std::pair<size_t, boost::shared_ptr<char> > > deque_to_server;
+	boost::mutex mutex_deque_to_server;
 
 	int client_recv_count;
 	bool stopping;

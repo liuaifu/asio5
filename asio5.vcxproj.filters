@@ -26,10 +26,10 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="asio5.cpp">
+    <ClCompile Include="session.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="session.cpp">
+    <ClCompile Include="main.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

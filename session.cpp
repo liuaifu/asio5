@@ -1,10 +1,10 @@
-#include "session.h"
+ï»¿#include "session.h"
 #include <boost/bind.hpp>
 #include <iostream>
+#include <boost/thread/lock_guard.hpp>
 
-extern boost::asio::io_service g_io_service;
 session::session(boost::asio::io_service& _io_service)
-	:client_socket(_io_service),server_socket(_io_service),strand_(_io_service)
+	:io_service_(_io_service),client_socket(_io_service),server_socket(_io_service),strand_(_io_service)
 {
 	client_recv_count = 0;
 	stopping = false;
@@ -40,17 +40,26 @@ void session::close_client()
 void session::write_to_client(char *data, size_t size)
 {
 	//BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
-	//BOOST_LOG_TRIVIAL(debug) <<id_<<": "<<"Ïòclient"<<"·¢ËÍ"<<size<<"×Ö½Ú";
-	boost::shared_ptr<char> data_;
-	data_ = boost::shared_ptr<char>(new char[size]);
-	memcpy(data_.get(), data, size);
-	boost::asio::async_write(client_socket,
-		boost::asio::buffer(data_.get(), size),
-		strand_.wrap(boost::bind(&session::handle_client_write, shared_from_this(),
-			data_,
-			boost::asio::placeholders::error)
-		)
-	);
+	//BOOST_LOG_TRIVIAL(debug) <<id_<<": "<<"å‘client"<<"å‘é€"<<size<<"å­—èŠ‚";
+
+	boost::shared_ptr<char> data_ptr = boost::shared_ptr<char>(new char[size]);
+	memcpy(data_ptr.get(), data, size);
+
+	boost::lock_guard<boost::mutex> lock(mutex_deque_to_client);
+
+	bool write_in_progress = !deque_to_client.empty();
+	deque_to_client.push_back(std::make_pair(size, data_ptr));
+	if (!write_in_progress)
+	{
+		const std::pair<size_t, boost::shared_ptr<char> >& pkt = deque_to_client.front();
+		boost::asio::async_write(client_socket,
+			boost::asio::buffer(pkt.second.get(), pkt.first),
+			strand_.wrap(boost::bind(&session::handle_client_write, shared_from_this(),
+				pkt.second,
+				boost::asio::placeholders::error)
+			)
+		);
+	}
 }
 
 void session::handle_client_read(const boost::system::error_code& error, size_t bytes_transferred)
@@ -66,14 +75,14 @@ void session::handle_client_read(const boost::system::error_code& error, size_t 
 			close_server();
 			return;
 		}
-		//BOOST_LOG_TRIVIAL(error) <<id_<<": "<<"client"<<"¶ÁÈ¡Êý¾Ý³ö´í£º´íÎóÂë="<<error.value()<<", "<<error.message();
+		//BOOST_LOG_TRIVIAL(error) <<id_<<": "<<"client"<<"è¯»å–æ•°æ®å‡ºé”™ï¼šé”™è¯¯ç ="<<error.value()<<", "<<error.message();
 		//service_ptr_->stop();
 		close_client();
 		close_server();
 		return;
 	}
 
-	//BOOST_LOG_TRIVIAL(debug)<<id_<<": "<<"´Óclient"<<"¶ÁÈ¡µ½"<<bytes_transferred<<"×Ö½Ú";
+	//BOOST_LOG_TRIVIAL(debug)<<id_<<": "<<"ä»Žclient"<<"è¯»å–åˆ°"<<bytes_transferred<<"å­—èŠ‚";
 	client_recv_count++;
 	if(client_recv_count==1)
 	{
@@ -92,13 +101,13 @@ void session::handle_client_read(const boost::system::error_code& error, size_t 
 			return;
 		}
 		/*
-		METHODµÄÖµÓÐ£º
-		X'00' ÎÞÑéÖ¤ÐèÇó
-		X'01' Í¨ÓÃ°²È«·þÎñÓ¦ÓÃ³ÌÐò½Ó¿Ú(GSSAPI)
-		X'02' ÓÃ»§Ãû/ÃÜÂë(USERNAME/PASSWORD)
-		X'03' ÖÁ X'7F' IANA ·ÖÅä(IANA ASSIGNED)
-		X'80' ÖÁ X'FE' Ë½ÈË·½·¨±£Áô(RESERVED FOR PRIVATE METHODS)
-		X'FF' ÎÞ¿É½ÓÊÜ·½·¨(NO ACCEPTABLE METHODS)
+		METHODçš„å€¼æœ‰ï¼š
+		X'00' æ— éªŒè¯éœ€æ±‚
+		X'01' é€šç”¨å®‰å…¨æœåŠ¡åº”ç”¨ç¨‹åºæŽ¥å£(GSSAPI)
+		X'02' ç”¨æˆ·å/å¯†ç (USERNAME/PASSWORD)
+		X'03' è‡³ X'7F' IANA åˆ†é…(IANA ASSIGNED)
+		X'80' è‡³ X'FE' ç§äººæ–¹æ³•ä¿ç•™(RESERVED FOR PRIVATE METHODS)
+		X'FF' æ— å¯æŽ¥å—æ–¹æ³•(NO ACCEPTABLE METHODS)
 		*/
 		client_buf[0] = '\x05';
 		client_buf[1] = '\x00';
@@ -116,7 +125,7 @@ void session::handle_client_read(const boost::system::error_code& error, size_t 
 		//|VER|CMD|RSV|ATYP|DST.ADDR|DST.PORT|
 		if(client_buf[0]!=0x05 || client_buf[1]!=0x01 || client_buf[2]!=0x00 || (client_buf[3]!=0x01 && client_buf[3]!=0x03))
 		{
-			//BOOST_LOG_TRIVIAL(error)<<id_<<": "<<"client"<<"²»Ö§³ÖµÄ´úÀíÐ­Òé";
+			//BOOST_LOG_TRIVIAL(error)<<id_<<": "<<"client"<<"ä¸æ”¯æŒçš„ä»£ç†åè®®";
 			//service_ptr_->stop();
 			close_client();
 			close_server();
@@ -135,7 +144,7 @@ void session::handle_client_read(const boost::system::error_code& error, size_t 
 			sprintf(port, "%d", ntohs(*(unsigned short*)(client_buf + 5 + client_buf[4])));
 		}
 
-		tcp::resolver resolver(g_io_service);
+		tcp::resolver resolver(io_service_);
 		tcp::resolver::query query(tcp::v4(), host, port);
 		tcp::resolver::iterator iterator = resolver.resolve(query);
 		cout << "connect to " << host << ":" << port << endl;
@@ -165,11 +174,25 @@ void session::handle_client_write(boost::shared_ptr<char> data, const boost::sys
 		if(error==boost::asio::error::operation_aborted)
 			return;
 
-		//BOOST_LOG_TRIVIAL(error)<<id_<<": "<<"client"<<"·¢ËÍÊý¾Ý³ö´í£º´íÎóÂë="<<error.value()<<", "<<error.message();
+		//BOOST_LOG_TRIVIAL(error)<<id_<<": "<<"client"<<"å‘é€æ•°æ®å‡ºé”™ï¼šé”™è¯¯ç ="<<error.value()<<", "<<error.message();
 		//service_ptr_->stop();
 		close_client();
 		close_server();
 		return;
+	}
+
+	boost::lock_guard<boost::mutex> lock(mutex_deque_to_client);
+	deque_to_client.pop_front();
+	if (!deque_to_client.empty())
+	{
+		const std::pair<size_t, boost::shared_ptr<char> >& pkt = deque_to_client.front();
+		boost::asio::async_write(client_socket,
+			boost::asio::buffer(pkt.second.get(), pkt.first),
+			strand_.wrap(boost::bind(&session::handle_client_write, shared_from_this(),
+				pkt.second,
+				boost::asio::placeholders::error)
+			)
+		);
 	}
 }
 
@@ -179,7 +202,7 @@ void session::handle_connect_server(boost::asio::mutable_buffers_1 buffer, const
 	unsigned char *p = boost::asio::buffer_cast<unsigned char*>(buffer);
 	if (error)
 	{
-		//BOOST_LOG_TRIVIAL(debug) << id_ << ": Á¬½Ó" << endpoint_iterator->host_name() << "Ê§°Ü";
+		//BOOST_LOG_TRIVIAL(debug) << id_ << ": è¿žæŽ¥" << endpoint_iterator->host_name() << "å¤±è´¥";
 		p[1] = 0x01;
 		close_client();
 		close_server();
@@ -187,7 +210,7 @@ void session::handle_connect_server(boost::asio::mutable_buffers_1 buffer, const
 	}
 	else
 	{
-		//BOOST_LOG_TRIVIAL(debug) << id_ << ": ÒÑÁ¬½Óµ½" << endpoint_iterator->host_name();
+		//BOOST_LOG_TRIVIAL(debug) << id_ << ": å·²è¿žæŽ¥åˆ°" << endpoint_iterator->host_name();
 		p[1] = 0x00;
 		server_socket.async_read_some(boost::asio::buffer(server_buf, SOCKET_RECV_BUF_LEN),
 			strand_.wrap(boost::bind(&session::handle_server_read, shared_from_this(),
@@ -209,13 +232,25 @@ void session::handle_connect_server(boost::asio::mutable_buffers_1 buffer, const
 void session::write_to_server(char *data, size_t size)
 {
 	//BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
-	//BOOST_LOG_TRIVIAL(debug)<<id_<<": "<<"Ïòservice"<<"·¢ËÍ"<<size<<"×Ö½Ú";
-	boost::asio::async_write(server_socket,
-		boost::asio::buffer(data, size),
-		strand_.wrap(boost::bind(&session::handle_server_write, shared_from_this(),
-		boost::asio::placeholders::error)
-		)
+	//BOOST_LOG_TRIVIAL(debug)<<id_<<": "<<"å‘service"<<"å‘é€"<<size<<"å­—èŠ‚";
+
+	boost::shared_ptr<char> data_ptr = boost::shared_ptr<char>(new char[size]);
+	memcpy(data_ptr.get(), data, size);
+
+	boost::lock_guard<boost::mutex> lock(mutex_deque_to_server);
+
+	bool write_in_progress = !deque_to_server.empty();
+	deque_to_server.push_back(std::make_pair(size, data_ptr));
+	if (!write_in_progress)
+	{
+		const std::pair<size_t, boost::shared_ptr<char> >& pkt = deque_to_server.front();
+		boost::asio::async_write(server_socket,
+			boost::asio::buffer(pkt.second.get(), pkt.first),
+			strand_.wrap(boost::bind(&session::handle_server_write, shared_from_this(),
+				boost::asio::placeholders::error)
+			)
 		);
+	}
 }
 
 void session::handle_server_read(const boost::system::error_code& error, size_t bytes_transferred)
@@ -228,13 +263,13 @@ void session::handle_server_read(const boost::system::error_code& error, size_t 
 			stopping = true;
 			return;
 		}
-		//BOOST_LOG_TRIVIAL(error)<<id_<<": "<<"service"<<"¶ÁÈ¡Êý¾Ý³ö´í£º´íÎóÂë="<<error.value()<<", "<<error.message();
+		//BOOST_LOG_TRIVIAL(error)<<id_<<": "<<"service"<<"è¯»å–æ•°æ®å‡ºé”™ï¼šé”™è¯¯ç ="<<error.value()<<", "<<error.message();
 		close_client();
 		close_server();
 		return;
 	}
 
-	//BOOST_LOG_TRIVIAL(debug)<<id_<<": "<<"´Óservice"<<"¶ÁÈ¡µ½"<<bytes_transferred<<"×Ö½Ú";
+	//BOOST_LOG_TRIVIAL(debug)<<id_<<": "<<"ä»Žservice"<<"è¯»å–åˆ°"<<bytes_transferred<<"å­—èŠ‚";
 
 	write_to_client(server_buf, bytes_transferred);
 	server_socket.async_read_some(boost::asio::buffer(server_buf, SOCKET_RECV_BUF_LEN),
@@ -253,9 +288,22 @@ void session::handle_server_write(const boost::system::error_code& error)
 		if(error==boost::asio::error::operation_aborted)
 			return;
 
-		//BOOST_LOG_TRIVIAL(error)<<id_<<": "<<"service"<<"Ïò·þÎñÆ÷·¢ËÍÊý¾Ý³ö´í£º´íÎóÂë="<<error.value()<<", "<<error.message();
+		//BOOST_LOG_TRIVIAL(error)<<id_<<": "<<"service"<<"å‘æœåŠ¡å™¨å‘é€æ•°æ®å‡ºé”™ï¼šé”™è¯¯ç ="<<error.value()<<", "<<error.message();
 		close_client();
 		close_server();
 		return;
+	}
+
+	boost::lock_guard<boost::mutex> lock(mutex_deque_to_server);
+	deque_to_server.pop_front();
+
+	if (!deque_to_server.empty()) {
+		const std::pair<size_t, boost::shared_ptr<char> >& pkt = deque_to_server.front();
+		boost::asio::async_write(server_socket,
+			boost::asio::buffer(pkt.second.get(), pkt.first),
+			strand_.wrap(boost::bind(&session::handle_server_write, shared_from_this(),
+				boost::asio::placeholders::error)
+			)
+		);
 	}
 }
