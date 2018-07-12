@@ -1,6 +1,7 @@
 # asio5
 
-a socks5 proxy server, user authentication is not supported.<br/>
+A socks5 proxy server, user authentication is not supported.<br/>
+This project is licensed under the terms of the GPL-v3 license.
 
 ### dependence
 - Boost 1.42+
