@@ -16,7 +16,7 @@ session::~session(void)
 
 void session::start()
 {
-	cout << "start read client" << endl;
+	//cout << "start read client" << endl;
 	client_socket.async_read_some(boost::asio::buffer(client_buf, SOCKET_RECV_BUF_LEN),
 		strand_.wrap(boost::bind(&session::handle_client_read, shared_from_this(),
 			boost::asio::placeholders::error,
@@ -28,13 +28,13 @@ void session::start()
 void session::close_server()
 {
 	server_socket.close();
-	cout << "server closed" << endl;
+	//cout << "server closed" << endl;
 }
 
 void session::close_client()
 {
 	client_socket.close();
-	cout << "client closed" << endl;
+	//cout << "client closed" << endl;
 }
 
 void session::write_to_client(char *data, size_t size)
@@ -144,15 +144,22 @@ void session::handle_client_read(const boost::system::error_code& error, size_t 
 			sprintf(port, "%d", ntohs(*(unsigned short*)(client_buf + 5 + client_buf[4])));
 		}
 
-		tcp::resolver resolver(io_service_);
-		tcp::resolver::query query(tcp::v4(), host, port);
-		tcp::resolver::iterator iterator = resolver.resolve(query);
-		cout << "connect to " << host << ":" << port << endl;
-		server_socket.async_connect(*iterator, 
-			strand_.wrap(boost::bind(&session::handle_connect_server, shared_from_this(),
-				boost::asio::buffer(client_buf, bytes_transferred),boost::asio::placeholders::error, iterator)
-			)
-		);
+		try {
+			tcp::resolver resolver(io_service_);
+			tcp::resolver::query query(tcp::v4(), host, port);
+			tcp::resolver::iterator iterator = resolver.resolve(query);
+			cout << "connect to " << host << ":" << port << endl;
+			server_socket.async_connect(*iterator, 
+				strand_.wrap(boost::bind(&session::handle_connect_server, shared_from_this(),
+					boost::asio::buffer(client_buf, bytes_transferred),boost::asio::placeholders::error, iterator)
+				)
+			);
+		}
+		catch(const std::exception& e){
+			cout << e.what() << endl;
+			close_client();
+			close_server();
+		}
 		return;
 	}else{
 		write_to_server(client_buf, bytes_transferred);

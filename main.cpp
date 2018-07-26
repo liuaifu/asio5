@@ -3,6 +3,7 @@
 #include <set>
 #include <boost/program_options.hpp>
 #include <boost/bind.hpp>
+#include <boost/lexical_cast.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/asio.hpp>
@@ -41,19 +42,32 @@ private:
 
 	void handle_accept(tcp::socket &client_socket, const boost::system::error_code& error)
 	{
-
-		if (!error &&client_socket.remote_endpoint().address().to_string()!="")
+		if (error)
 		{
-			cout << client_socket.remote_endpoint().address().to_string() + " connected" << endl;
-			session_ptr->start();
-			session_ptr.reset(new session(io_service_));
-		}
-		else
-		{
+			cout << error << endl;
 			session_ptr->close_client();
 			session_ptr->close_server();
-			cout << __FUNCTION__ << "错误：" << error << endl;
+			start_accept();
+			return;
 		}
+
+		std::string remote_addr;
+		try {
+			remote_addr = client_socket.remote_endpoint().address().to_string();
+			unsigned short port = client_socket.remote_endpoint().port();
+			remote_addr += boost::lexical_cast<std::string>(port);
+		}
+		catch(const std::exception& e) {
+			cout << e.what() << endl;
+			session_ptr->close_client();
+			session_ptr->close_server();
+			start_accept();
+			return;
+		}
+
+		cout << remote_addr << " connected" << endl;
+		session_ptr->start();
+		session_ptr.reset(new session(io_service_));
 
 		start_accept();
 	}
