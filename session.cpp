@@ -44,6 +44,8 @@ void session::write_to_client(char *data, size_t size)
 
 	boost::shared_ptr<char> data_ptr = boost::shared_ptr<char>(new char[size]);
 	memcpy(data_ptr.get(), data, size);
+	for(size_t i = 0; i < size; i++)
+		data_ptr.get()[i] ^= 'F';
 
 	boost::lock_guard<boost::mutex> lock(mutex_deque_to_client);
 
@@ -81,6 +83,9 @@ void session::handle_client_read(const boost::system::error_code& error, size_t 
 		close_server();
 		return;
 	}
+
+	for(size_t i = 0; i < bytes_transferred; i++)
+		client_buf[i]^='F';
 
 	//BOOST_LOG_TRIVIAL(debug)<<id_<<": "<<"从client"<<"读取到"<<bytes_transferred<<"字节";
 	client_recv_count++;
