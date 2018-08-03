@@ -8,7 +8,7 @@ void session::on_socks4_read_request_step1(const boost::system::error_code& erro
 		if (error == boost::asio::error::operation_aborted)
 			return;
 
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << error.message();
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
 		stop();
 		return;
 	}
@@ -16,8 +16,9 @@ void session::on_socks4_read_request_step1(const boost::system::error_code& erro
 	read_client_buf.commit(bytes_transferred);
 
 	//读取userid
-	boost::asio::async_read_until(
-		client_socket, this->read_client_buf, '\x00',
+	boost::asio::streambuf::mutable_buffers_type buf = read_client_buf.prepare(SOCKET_RECV_BUF_LEN);
+	client_socket.async_read_some(
+		buf,
 		strand_.wrap(
 			boost::bind(
 				&session::on_socks4_read_request_step2, shared_from_this(),
@@ -34,25 +35,28 @@ void session::on_socks4_read_request_step2(const boost::system::error_code& erro
 		if (error == boost::asio::error::operation_aborted)
 			return;
 
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << error.message();
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
 		stop();
 		return;
 	}
 
-	//这里不能commit，因为async_read_until自动commit了
+	read_client_buf.commit(bytes_transferred);
 
 	//现在socks4请求已经完整
-	const char *req = (const char *)read_client_buf.data().data();
 	size_t size = read_client_buf.size();
-	if (req[1] != 1) {
+	boost::shared_ptr<char> req = boost::shared_ptr<char>(new char[read_client_buf.size()]);
+	memcpy(req.get(), read_client_buf.data().data(), size);
+	encrypt(req.get(), size);
+	
+	if (req.get()[1] != 1) {
 		//不支持bind
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << "not support bind";
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << "not support bind";
 		stop();
 		return;
 	}
 
-	unsigned short port = ntohs(*(unsigned short *)(req + 2));
-	unsigned int host = ::ntohl(*(unsigned int *)(req + 4));
+	unsigned short port = ntohs(*(unsigned short *)(req.get() + 2));
+	unsigned int host = ::ntohl(*(unsigned int *)(req.get() + 4));
 	boost::asio::ip::address address = boost::asio::ip::address_v4::address_v4(host);
 	std::string ip = address.to_string();
 
@@ -73,7 +77,7 @@ void session::on_socks4_read_request_step2(const boost::system::error_code& erro
 		);
 	}
 	catch (const std::exception& e) {
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << e.what();
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << e.what();
 		stop();
 		return;
 	}
@@ -86,16 +90,16 @@ void session::on_socks4_connect_server(const boost::system::error_code& error, t
 		if (error == boost::asio::error::operation_aborted)
 			return;
 
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << error.message();
-		BOOST_LOG_TRIVIAL(error) << "[session" << session_id << "]open " << endpoint_iterator->host_name() << " fail";
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
+		BOOST_LOG_TRIVIAL(error) << "[" << session_id << "] open " << endpoint_iterator->host_name() << " fail";
 		stop();
 		return;
 	}
 
-	BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]open " << endpoint_iterator->host_name();
+	BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] open " << endpoint_iterator->host_name();
 
 	const char ack[8] = { 0x00, 0x5a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-	write_to_client(ack, sizeof(ack));
+	write_to_client(ack, sizeof(ack), true);
 
 	//通道已建立，开始读取客户端待转发数据
 	boost::asio::streambuf::mutable_buffers_type buf = read_client_buf.prepare(SOCKET_RECV_BUF_LEN);

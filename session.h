@@ -30,8 +30,10 @@ public:
 	/**
 	* 通用的方法
 	*/
-	void write_to_client(const char *data, size_t size);
-	void write_to_server(const char *data, size_t size);
+	unsigned int get_session_id() { return this->session_id; }
+	void encrypt(void *data, size_t size);
+	void write_to_client(const char *data, size_t size, bool need_encrypt);
+	void write_to_server(const char *data, size_t size, bool need_encrypt);
 	void on_read_client_data(const boost::system::error_code& error, size_t bytes_transferred);
 	void on_read_server_data(const boost::system::error_code& error, size_t bytes_transferred);
 	void handle_client_write(boost::shared_ptr<char> data, const boost::system::error_code& error);

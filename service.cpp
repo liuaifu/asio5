@@ -21,9 +21,6 @@ void service::start()
 
 void service::async_accept()
 {
-	static int id = 0;
-	id++;
-
 	acceptor_.async_accept(
 		session_ptr->client_socket,
 		boost::bind(&service::handle_accept, shared_from_this(), boost::ref(session_ptr->client_socket), _1)
@@ -54,7 +51,7 @@ void service::handle_accept(tcp::socket &client_socket, const boost::system::err
 		return;
 	}
 
-	BOOST_LOG_TRIVIAL(debug) << remote_addr << " connected";
+	BOOST_LOG_TRIVIAL(debug) << "[" << session_ptr->get_session_id() << "] " << remote_addr << " connected";
 	session_ptr->start();
 	session_ptr.reset(new session(io_service_, session_id++));
 

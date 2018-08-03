@@ -50,13 +50,24 @@ void session::stop()
 	}
 }
 
-void session::write_to_client(const char *data, size_t size)
+void session::encrypt(void *data, size_t size)
 {
-	//BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
-	//BOOST_LOG_TRIVIAL(debug) <<id_<<": "<<"向client"<<"发送"<<size<<"字节";
+#ifndef ENCRYPT
+	return;
+#endif
 
+	char *p = (char*)data;
+	for (size_t i = 0; i < size; i++) {
+		p[i] ^= 'F';
+	}
+}
+
+void session::write_to_client(const char *data, size_t size, bool need_encrypt)
+{
 	boost::shared_ptr<char> data_ptr = boost::shared_ptr<char>(new char[size]);
 	memcpy(data_ptr.get(), data, size);
+	if(need_encrypt)
+		encrypt(data_ptr.get(), size);
 
 	boost::lock_guard<boost::mutex> lock(mutex_deque_to_client);
 
@@ -75,13 +86,12 @@ void session::write_to_client(const char *data, size_t size)
 	}
 }
 
-void session::write_to_server(const char *data, size_t size)
+void session::write_to_server(const char *data, size_t size, bool need_decrypt)
 {
-	//BOOST_LOG_TRIVIAL(debug) << id_ << ": " << __FUNCTION__;
-	//BOOST_LOG_TRIVIAL(debug)<<id_<<": "<<"向service"<<"发送"<<size<<"字节";
-
 	boost::shared_ptr<char> data_ptr = boost::shared_ptr<char>(new char[size]);
 	memcpy(data_ptr.get(), data, size);
+	if (need_decrypt)
+		encrypt(data_ptr.get(), size);
 
 	boost::lock_guard<boost::mutex> lock(mutex_deque_to_server);
 
@@ -104,7 +114,7 @@ void session::on_read_client_data(const boost::system::error_code& error, size_t
 	if (error) {
 		if (error == boost::asio::error::operation_aborted)
 			return;
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << error.message();
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
 		stop();
 		return;
 	}
@@ -114,7 +124,7 @@ void session::on_read_client_data(const boost::system::error_code& error, size_t
 	const char *data = (const char *)read_client_buf.data().data();
 	size_t size = read_client_buf.size();
 
-	write_to_server(data, size);
+	write_to_server(data, size, true);
 	read_client_buf.consume(size);
 
 	boost::asio::streambuf::mutable_buffers_type buf = read_client_buf.prepare(SOCKET_RECV_BUF_LEN);
@@ -131,14 +141,14 @@ void session::on_read_server_data(const boost::system::error_code& error, size_t
 	if (error) {
 		if (error == boost::asio::error::operation_aborted)
 			return;
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << error.message();
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
 		stop();
 		return;
 	}
 
 	//BOOST_LOG_TRIVIAL(debug)<<id_<<": "<<"从service"<<"读取到"<<bytes_transferred<<"字节";
 
-	write_to_client(server_buf, bytes_transferred);
+	write_to_client(server_buf, bytes_transferred, true);
 	server_socket.async_read_some(boost::asio::buffer(server_buf, SOCKET_RECV_BUF_LEN),
 		strand_.wrap(boost::bind(&session::on_read_server_data, shared_from_this(),
 			boost::asio::placeholders::error,
@@ -154,7 +164,7 @@ void session::handle_client_write(boost::shared_ptr<char> data, const boost::sys
 		if (error == boost::asio::error::operation_aborted)
 			return;
 
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << error.message();
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
 		stop();
 		return;
 	}
@@ -181,7 +191,7 @@ void session::handle_server_write(const boost::system::error_code& error)
 		if (error == boost::asio::error::operation_aborted)
 			return;
 
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << error.message();
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
 		stop();
 		return;
 	}
@@ -210,14 +220,16 @@ void session::on_read_prefix(const boost::system::error_code& error, size_t byte
 		if (error == boost::asio::error::operation_aborted)
 			return;
 
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << error.message();
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
 		stop();
 		return;
 	}
 
 	read_client_buf.commit(bytes_transferred);
 
-	const char *data = (const char *)read_client_buf.data().data();
+	char data[3];
+	memcpy(data, read_client_buf.data().data(), 3);
+	encrypt(data, sizeof(data));
 	if (memcmp(data, "OPT", 3) == 0 || //OPTIONS
 		memcmp(data, "GET", 3) == 0 || //GET
 		memcmp(data, "HEA", 3) == 0 || //HEAD
@@ -226,8 +238,10 @@ void session::on_read_prefix(const boost::system::error_code& error, size_t byte
 		memcmp(data, "TRA", 3) == 0	//TRACE
 		) {
 		proxy_type = PROXY_TYPE_HTTP1;
+		char suffix[] = "\r\n\r\n";
+		encrypt(suffix, sizeof(suffix) - 1);
 		boost::asio::async_read_until(
-			client_socket, this->read_client_buf, "\r\n\r\n",
+			client_socket, this->read_client_buf, suffix,
 			strand_.wrap(
 				boost::bind(
 					&session::on_http1_read_request_head, shared_from_this(),
@@ -239,7 +253,9 @@ void session::on_read_prefix(const boost::system::error_code& error, size_t byte
 	}
 	else if (memcmp(data, "CON", 3) == 0) {
 		proxy_type = PROXY_TYPE_HTTP2;
-		boost::asio::async_read_until(client_socket, read_client_buf, "\r\n\r\n",
+		char suffix[] = "\r\n\r\n";
+		encrypt(suffix, sizeof(suffix) - 1);
+		boost::asio::async_read_until(client_socket, read_client_buf, suffix,
 			strand_.wrap(
 				boost::bind(
 					&session::on_http2_read_request, shared_from_this(),
@@ -262,14 +278,13 @@ void session::on_read_prefix(const boost::system::error_code& error, size_t byte
 			)
 		);
 	}
-	else if (data[0] != '\x05') {
+	else if (data[0] == '\x05') {
 		proxy_type = PROXY_TYPE_SOCKS5;
 		boost::system::error_code ec;
 		on_socks5_read_request(ec, bytes_transferred);
 	}
 	else {
 		stop();
-		return;
 	}
 }
 
@@ -279,15 +294,20 @@ void session::on_socks5_read_request(const boost::system::error_code& error, siz
 		if (error == boost::asio::error::operation_aborted)
 			return;
 
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << error.message();
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
 		stop();
 		return;
 	}
 
-	//read_client_buf.commit(bytes_transferred);
-	const char *data = (const char *)read_client_buf.data().data();
+	if (bytes_transferred > 0)
+		read_client_buf.commit(bytes_transferred);
+	size_t size = read_client_buf.size();
+	boost::shared_ptr<char> ptr_buf = boost::shared_ptr<char>(new char[size]);
+	memcpy(ptr_buf.get(), read_client_buf.data().data(), size);
+	read_client_buf.consume(size);
+	encrypt(ptr_buf.get(), size);
+	const char *data = ptr_buf.get();
 
-	//BOOST_LOG_TRIVIAL(debug)<<id_<<": "<<"从client"<<"读取到"<<bytes_transferred<<"字节";
 	//sockts5协议文档：https://tools.ietf.org/html/rfc1928
 	client_recv_count++;
 	if (client_recv_count == 1)
@@ -307,11 +327,11 @@ void session::on_socks5_read_request(const boost::system::error_code& error, siz
 		X'80' 至 X'FE' 私人方法保留(RESERVED FOR PRIVATE METHODS)
 		X'FF' 无可接受方法(NO ACCEPTABLE METHODS)
 		*/
-		write_to_client("\x05\x00", 2);
+		write_to_client("\x05\x00", 2, true);
 	}
 	else if (client_recv_count == 2)
 	{
-		if (bytes_transferred < 10) {
+		if (size < 10) {
 			//service_ptr_->stop();
 			stop();
 			return;
@@ -355,13 +375,13 @@ void session::on_socks5_read_request(const boost::system::error_code& error, siz
 			);
 		}
 		catch (const std::exception& e) {
-			BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << e.what();
+			BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << e.what();
 			stop();
 		}
 		return;
 	}
 	else {
-		write_to_server(data, bytes_transferred);
+		write_to_server(data, size, false);
 	}
 
 	boost::asio::streambuf::mutable_buffers_type buf = read_client_buf.prepare(SOCKET_RECV_BUF_LEN);
@@ -377,7 +397,7 @@ void session::on_socks5_connect_server(const boost::system::error_code& error, t
 {
 	if (error)
 	{
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << error.message();
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
 		BOOST_LOG_TRIVIAL(error) << "[socks5] open " << endpoint_iterator->host_name() << "fail";
 		stop();
 		return;
@@ -411,7 +431,7 @@ void session::on_socks5_connect_server(const boost::system::error_code& error, t
 		stop();
 		return;
 	}
-	write_to_client(ack, sizeof(ack));
+	write_to_client(ack, sizeof(ack), true);
 
 	boost::asio::streambuf::mutable_buffers_type buf = read_client_buf.prepare(SOCKET_RECV_BUF_LEN);
 	client_socket.async_read_some(buf,

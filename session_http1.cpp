@@ -8,15 +8,20 @@ void session::on_http1_read_request_head(const boost::system::error_code& error,
 		if (error == boost::asio::error::operation_aborted)
 			return;
 
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << error.message();
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
 		stop();
 		return;
 	}
 
 	http1_request_size = bytes_transferred;
 	boost::asio::streambuf::const_buffers_type buf = read_client_buf.data();
-	std::string req(boost::asio::buffers_begin(buf), boost::asio::buffers_begin(buf) + http1_request_size);
+	char *head = new char[http1_request_size];
+	memcpy(head, read_client_buf.data().data(), http1_request_size);
+	encrypt(head, http1_request_size);
+	std::string req(head, http1_request_size);
+	delete head;
 
+	//解析body长度
 	boost::xpressive::sregex rx_length = boost::xpressive::sregex::compile(".*\r\nContent-Length:\\s+(\\d+)\r\n.*");
 	boost::xpressive::smatch what;
 	if (boost::xpressive::regex_match(req, what, rx_length)) {
@@ -46,7 +51,7 @@ void session::on_http1_read_request_body(const boost::system::error_code& error,
 		if (error == boost::asio::error::operation_aborted)
 			return;
 
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << error.message();
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
 		stop();
 		return;
 	}
@@ -56,8 +61,11 @@ void session::on_http1_read_request_body(const boost::system::error_code& error,
 		http1_request_size = bytes_transferred;
 	}
 
-	boost::asio::streambuf::const_buffers_type buf = read_client_buf.data();
-	std::string req(boost::asio::buffers_begin(buf), boost::asio::buffers_begin(buf) + http1_request_size);
+	char *buf = new char[http1_request_size];
+	memcpy(buf, read_client_buf.data().data(), http1_request_size);
+	encrypt(buf, http1_request_size);
+	std::string req(buf, http1_request_size);
+	delete buf;
 	read_client_buf.consume(http1_request_size);
 	http1_request_size = 0;
 
@@ -67,12 +75,14 @@ void session::on_http1_read_request_body(const boost::system::error_code& error,
 	req = boost::xpressive::regex_replace(req, rx_uri, "");
 
 	if (client_recv_count > 0) {
-		write_to_server(req.c_str(), req.size());
+		write_to_server(req.c_str(), req.size(), false);
 		client_recv_count++;
 
 		//读取下一个请求
+		char suffix[] = "\r\n\r\n";
+		encrypt(suffix, sizeof(suffix) - 1);
 		boost::asio::async_read_until(
-			client_socket, read_client_buf, "\r\n\r\n",
+			client_socket, read_client_buf, suffix,
 			strand_.wrap(
 				boost::bind(
 					&session::on_http1_read_request_head, shared_from_this(),
@@ -101,7 +111,7 @@ void session::on_http1_read_request_body(const boost::system::error_code& error,
 		tcp::resolver resolver(io_service_);
 		tcp::resolver::query query(tcp::v4(), host, port);
 		tcp::resolver::iterator iterator = resolver.resolve(query);
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << host << ":" << port;
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << host << ":" << port;
 		server_socket.async_connect(*iterator,
 			strand_.wrap(
 				boost::bind(
@@ -112,15 +122,17 @@ void session::on_http1_read_request_body(const boost::system::error_code& error,
 		);
 	}
 	catch (const std::exception& e) {
-		BOOST_LOG_TRIVIAL(error) << "[session" << session_id << "]" << e.what();
+		BOOST_LOG_TRIVIAL(error) << "[" << session_id << "] " << e.what();
 		stop();
 	}
 
 	client_recv_count++;
 
 	//读取下一个请求
+	char suffix[] = "\r\n\r\n";
+	encrypt(suffix, sizeof(suffix) - 1);
 	boost::asio::async_read_until(
-		client_socket, read_client_buf, "\r\n\r\n",
+		client_socket, read_client_buf, suffix,
 		strand_.wrap(
 			boost::bind(
 				&session::on_http1_read_request_head, shared_from_this(),
@@ -138,13 +150,13 @@ void session::on_http1_connect_server(const std::string req, const boost::system
 		if (error == boost::asio::error::operation_aborted)
 			return;
 
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << error.message();
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
 		BOOST_LOG_TRIVIAL(error) << "[http1] open " << endpoint_iterator->host_name() << " fail";
 		stop();
 		return;
 	}
 
-	write_to_server(req.c_str(), req.size());
+	write_to_server(req.c_str(), req.size(), false);
 
 	//开始读取服务端待转发数据
 	server_socket.async_read_some(boost::asio::buffer(server_buf, SOCKET_RECV_BUF_LEN),
@@ -161,12 +173,12 @@ void session::on_http1_read_server_data(const boost::system::error_code& error, 
 		if (error == boost::asio::error::operation_aborted)
 			return;
 
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << error.message();
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
 		stop();
 		return;
 	}
 
-	write_to_client(server_buf, bytes_transferred);
+	write_to_client(server_buf, bytes_transferred, true);
 	server_socket.async_read_some(boost::asio::buffer(server_buf, SOCKET_RECV_BUF_LEN),
 		strand_.wrap(boost::bind(&session::on_http1_read_server_data, shared_from_this(),
 			boost::asio::placeholders::error,

@@ -8,13 +8,16 @@ void session::on_http2_read_request(const boost::system::error_code& error, size
 		if (error == boost::asio::error::operation_aborted)
 			return;
 
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << error.message();
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
 		stop();
 		return;
 	}
 
-	boost::asio::streambuf::const_buffers_type buf = read_client_buf.data();
-	std::string req(boost::asio::buffers_begin(buf), boost::asio::buffers_end(buf));
+	char *buf = new char[read_client_buf.size()];
+	memcpy(buf, read_client_buf.data().data(), read_client_buf.size());
+	encrypt(buf, read_client_buf.size());
+	std::string req(buf, read_client_buf.size());
+	delete buf;
 	read_client_buf.consume(req.size());
 	boost::xpressive::sregex rx = boost::xpressive::sregex::compile("CONNECT ([^:]+):(\\d+) HTTP/1.[01].*", boost::xpressive::icase);
 	boost::xpressive::smatch what;
@@ -41,7 +44,7 @@ void session::on_http2_read_request(const boost::system::error_code& error, size
 		);
 	}
 	catch (const std::exception& e) {
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << e.what();
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << e.what();
 		stop();
 	}
 }
@@ -50,17 +53,17 @@ void session::on_http2_connect_server(const boost::system::error_code& error, tc
 {
 	if (error)
 	{
-		BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]" << error.message();
-		BOOST_LOG_TRIVIAL(error) << "[session" << session_id << "]open " << endpoint_iterator->host_name() << " fail";
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
+		BOOST_LOG_TRIVIAL(error) << "[" << session_id << "] open " << endpoint_iterator->host_name() << " fail";
 
 		stop();
 		return;
 	}
 
-	BOOST_LOG_TRIVIAL(debug) << "[session" << session_id << "]open " << endpoint_iterator->host_name();
+	BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] open " << endpoint_iterator->host_name();
 
 	std::string ack = "HTTP/1.1 200 Connection Established\r\n\r\n";
-	write_to_client(ack.c_str(), ack.size());
+	write_to_client(ack.c_str(), ack.size(), true);
 
 	boost::asio::streambuf::mutable_buffers_type buf = read_client_buf.prepare(SOCKET_RECV_BUF_LEN);
 	client_socket.async_read_some(buf,
