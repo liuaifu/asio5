@@ -9,8 +9,14 @@ ADD_EXECUTABLE(asio5
 	session_socks4.cpp
 	)
 
+if(ENCRYPT)
+	ADD_DEFINITIONS(-DENCRYPT)
+endif(ENCRYPT)
+
+ADD_DEFINITIONS(-DBOOST_LOG_DYN_LINK)
+
 find_package(Boost
-	1.42.0
+	1.54.0
 	REQUIRED
 	COMPONENTS system thread program_options log
 	)

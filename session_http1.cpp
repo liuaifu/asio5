@@ -16,7 +16,7 @@ void session::on_http1_read_request_head(const boost::system::error_code& error,
 	http1_request_size = bytes_transferred;
 	boost::asio::streambuf::const_buffers_type buf = read_client_buf.data();
 	char *head = new char[http1_request_size];
-	memcpy(head, read_client_buf.data().data(), http1_request_size);
+	memcpy(head, boost::asio::buffer_cast<const char*>(read_client_buf.data()), http1_request_size);
 	encrypt(head, http1_request_size);
 	std::string req(head, http1_request_size);
 	delete head;
@@ -62,7 +62,7 @@ void session::on_http1_read_request_body(const boost::system::error_code& error,
 	}
 
 	char *buf = new char[http1_request_size];
-	memcpy(buf, read_client_buf.data().data(), http1_request_size);
+	memcpy(buf, boost::asio::buffer_cast<const char*>(read_client_buf.data()), http1_request_size);
 	encrypt(buf, http1_request_size);
 	std::string req(buf, http1_request_size);
 	delete buf;

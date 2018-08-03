@@ -14,7 +14,7 @@ void session::on_http2_read_request(const boost::system::error_code& error, size
 	}
 
 	char *buf = new char[read_client_buf.size()];
-	memcpy(buf, read_client_buf.data().data(), read_client_buf.size());
+	memcpy(buf, boost::asio::buffer_cast<const char*>(read_client_buf.data()), read_client_buf.size());
 	encrypt(buf, read_client_buf.size());
 	std::string req(buf, read_client_buf.size());
 	delete buf;

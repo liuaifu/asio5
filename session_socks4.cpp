@@ -45,7 +45,7 @@ void session::on_socks4_read_request_step2(const boost::system::error_code& erro
 	//现在socks4请求已经完整
 	size_t size = read_client_buf.size();
 	boost::shared_ptr<char> req = boost::shared_ptr<char>(new char[read_client_buf.size()]);
-	memcpy(req.get(), read_client_buf.data().data(), size);
+	memcpy(req.get(), boost::asio::buffer_cast<const char*>(read_client_buf.data()), size);
 	encrypt(req.get(), size);
 	
 	if (req.get()[1] != 1) {
@@ -57,7 +57,7 @@ void session::on_socks4_read_request_step2(const boost::system::error_code& erro
 
 	unsigned short port = ntohs(*(unsigned short *)(req.get() + 2));
 	unsigned int host = ::ntohl(*(unsigned int *)(req.get() + 4));
-	boost::asio::ip::address address = boost::asio::ip::address_v4::address_v4(host);
+	boost::asio::ip::address_v4 address(host);
 	std::string ip = address.to_string();
 
 	read_client_buf.consume(size);

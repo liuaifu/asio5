@@ -121,7 +121,7 @@ void session::on_read_client_data(const boost::system::error_code& error, size_t
 
 	read_client_buf.commit(bytes_transferred);
 
-	const char *data = (const char *)read_client_buf.data().data();
+	const char *data = boost::asio::buffer_cast<const char *>(read_client_buf.data());
 	size_t size = read_client_buf.size();
 
 	write_to_server(data, size, true);
@@ -228,7 +228,7 @@ void session::on_read_prefix(const boost::system::error_code& error, size_t byte
 	read_client_buf.commit(bytes_transferred);
 
 	char data[3];
-	memcpy(data, read_client_buf.data().data(), 3);
+	memcpy(data, boost::asio::buffer_cast<const char*>(read_client_buf.data()), 3);
 	encrypt(data, sizeof(data));
 	if (memcmp(data, "OPT", 3) == 0 || //OPTIONS
 		memcmp(data, "GET", 3) == 0 || //GET
@@ -303,7 +303,7 @@ void session::on_socks5_read_request(const boost::system::error_code& error, siz
 		read_client_buf.commit(bytes_transferred);
 	size_t size = read_client_buf.size();
 	boost::shared_ptr<char> ptr_buf = boost::shared_ptr<char>(new char[size]);
-	memcpy(ptr_buf.get(), read_client_buf.data().data(), size);
+	memcpy(ptr_buf.get(), boost::asio::buffer_cast<const char*>(read_client_buf.data()), size);
 	read_client_buf.consume(size);
 	encrypt(ptr_buf.get(), size);
 	const char *data = ptr_buf.get();
@@ -418,7 +418,7 @@ void session::on_socks5_connect_server(const boost::system::error_code& error, t
 	ack[3] = 0x01;
 
 	try {
-		std::array<unsigned char, 4U> address = server_socket.local_endpoint().address().to_v4().to_bytes();
+		boost::asio::ip::address_v4::bytes_type address = server_socket.local_endpoint().address().to_v4().to_bytes();
 		unsigned short port = server_socket.local_endpoint().port();
 		ack[4] = address[0];
 		ack[5] = address[1];
