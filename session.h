@@ -68,6 +68,7 @@ public:
 	/**
 	* socks5代理
 	*/
+	void on_socks5_read_more_methods(const boost::system::error_code& error, size_t bytes_transferred);
 	void on_socks5_read_request(const boost::system::error_code& error, size_t bytes_transferred);
 	void on_socks5_connect_server(const boost::system::error_code& error, tcp::resolver::iterator endpoint_iterator);
 

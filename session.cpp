@@ -280,12 +280,47 @@ void session::on_read_prefix(const boost::system::error_code& error, size_t byte
 	}
 	else if (data[0] == '\x05') {
 		proxy_type = PROXY_TYPE_SOCKS5;
-		boost::system::error_code ec;
-		on_socks5_read_request(ec, bytes_transferred);
+		if (data[1] > 1) {
+			// 把methods收全
+			// methods最多255个
+			int left_methods = (unsigned char)(data[1]) - 1;
+			boost::asio::streambuf::mutable_buffers_type buf = read_client_buf.prepare(left_methods);
+			boost::asio::async_read(client_socket, buf,
+				strand_.wrap(
+					boost::bind(
+						&session::on_socks5_read_more_methods,
+						shared_from_this(),
+						boost::asio::placeholders::error,
+						boost::asio::placeholders::bytes_transferred
+					)
+				)
+			);
+		}
+		else {
+			boost::system::error_code ec;
+			on_socks5_read_request(ec, 0);
+		}
 	}
 	else {
 		stop();
 	}
+}
+
+void session::on_socks5_read_more_methods(const boost::system::error_code& error, size_t bytes_transferred)
+{
+	if (error) {
+		if (error == boost::asio::error::operation_aborted)
+			return;
+
+		BOOST_LOG_TRIVIAL(debug) << "[" << session_id << "] " << error.message();
+		stop();
+		return;
+	}
+
+	read_client_buf.commit(bytes_transferred);
+
+	boost::system::error_code ec;
+	on_socks5_read_request(ec, 0);
 }
 
 void session::on_socks5_read_request(const boost::system::error_code& error, size_t bytes_transferred)
@@ -301,23 +336,36 @@ void session::on_socks5_read_request(const boost::system::error_code& error, siz
 
 	if (bytes_transferred > 0)
 		read_client_buf.commit(bytes_transferred);
+
 	size_t size = read_client_buf.size();
 	boost::shared_ptr<char> ptr_buf = boost::shared_ptr<char>(new char[size]);
 	memcpy(ptr_buf.get(), boost::asio::buffer_cast<const char*>(read_client_buf.data()), size);
 	read_client_buf.consume(size);
-	encrypt(ptr_buf.get(), size);
-	const char *data = ptr_buf.get();
+	char *data = ptr_buf.get();
+	encrypt(data, size);
 
 	//sockts5协议文档：https://tools.ietf.org/html/rfc1928
 	client_recv_count++;
 	if (client_recv_count == 1)
 	{
-		if (memcmp(data, "\x05\x01\x00", 3) != 0)
-		{
-			//service_ptr_->stop();
+		if (data[0] != '\x05' || data[1] == '\x00') {
 			stop();
 			return;
 		}
+
+		bool is_no_auth_required = false;
+		for (int i = 0; i < (unsigned char)(data[1]); i++) {
+			if (data[2 + i] == 0) {
+				is_no_auth_required = true;
+				break;
+			}
+		}
+		if (!is_no_auth_required) {
+			//客户端不支持免认证（NO AUTHENTICATION REQUIRED）
+			stop();
+			return;
+		}
+
 		/**
 		METHOD的值有：
 		X'00' 无验证需求

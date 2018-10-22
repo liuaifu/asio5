@@ -71,8 +71,8 @@ void session::on_http1_read_request_body(const boost::system::error_code& error,
 
 	boost::replace_first(req, "Proxy-Connection:", "Connection:");
 	//去除url中的协议类型、主机名、端口，只保留路径和参数
-	boost::xpressive::sregex rx_uri = boost::xpressive::sregex::compile("https*://[^/]*");
-	req = boost::xpressive::regex_replace(req, rx_uri, "");
+	boost::xpressive::sregex rx_uri = boost::xpressive::sregex::compile("https*://[^ /]*/?");
+	req = boost::xpressive::regex_replace(req, rx_uri, "/");
 
 	if (client_recv_count > 0) {
 		write_to_server(req.c_str(), req.size(), false);
